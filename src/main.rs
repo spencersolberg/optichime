@@ -26,6 +26,7 @@ struct Override {
 #[derive (Debug, Clone)]
 enum Predicate {
     Name(String),
+    Nbt(String, String)
 }
 
 fn main() {
@@ -146,9 +147,24 @@ fn convert_optifine_model_to_item_struct(path: &String, items: &mut Vec<Item>) -
 
     let name = Path::new(&path).file_name().expect("error reading path").to_string_lossy().replace(".properties", "");
 
+    let mut predicate: Predicate = Predicate::Name("Placeholder".to_string()); // what am i doing
+
+    for (key, val) in &properties {
+        println!("{}: {}", key, val);
+
+        
+        if key.contains("nbt.display.Name")  { 
+            predicate = Predicate::Name(val.to_string()); 
+        } else 
+        if key.contains("nbt") {
+            predicate = Predicate::Nbt(key.to_string(), val.to_string());
+        }
+
+    }
+
     let override2 = Override {
         model: String::from(format!("item/{}", name)),
-        predicate: Predicate::Name(String::from(properties.get("nbt.display.Name").expect("Property could not be registered")))
+        predicate: predicate
     };
 
     let mut publish_new_item: bool = true;
@@ -164,9 +180,9 @@ fn convert_optifine_model_to_item_struct(path: &String, items: &mut Vec<Item>) -
     if publish_new_item {
         &items.push(Item {
             parent: String::from("minecraft:item/generated"),
-            texture: String::from(format!("minecraft:item/{}", properties.get("items").expect("Property could not be registered"))),
+            texture: String::from(format!("minecraft:item/{}", properties.get("items").expect("Property could not be registered").replace("minecraft:", "").replace("\r", ""))),
             overrides: vec![override2],
-            name: name.to_string()
+            name: name.to_string().replace("minecraft:", "").replace("\\r", "")
         });
     }
     
@@ -177,7 +193,8 @@ fn serialize_item_struct_to_original_model(item: &Item) -> serde_json::Value {
     let mut overrides_vec: Vec<serde_json::Value> = Vec::new();
     for r#override in &item.overrides {
         let predicate = match &r#override.predicate {
-            Predicate::Name(name) => json!({"name": name})
+            Predicate::Name(name) => json!({"name": name}),
+            Predicate::Nbt(key, val) => convert_nbt_string_to_value(key.to_string(), val.to_string())
         } ;
 
         overrides_vec.push(json!({"predicate": predicate, "model": r#override.model}));
@@ -209,4 +226,22 @@ fn serialize_item_struct_to_override_model (item: &Item) -> Vec<serde_json::Valu
     }
 
     model_json_vec
+}
+
+fn convert_nbt_string_to_value (key: String, val: String) -> serde_json::Value {
+    let dots = key.split(".").collect::<Vec<&str>>();
+    
+    let mut final_nbt: serde_json::Value = json!({});
+
+    let mut store_value = true;
+    for part in dots.iter().rev() {
+        if store_value {
+            final_nbt = json!({part.to_string(): &val.trim()});
+            store_value = false;
+        } else {
+            final_nbt = json!({part.to_string(): final_nbt});
+        }
+    }
+
+    final_nbt
 }
