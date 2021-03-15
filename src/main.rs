@@ -26,7 +26,8 @@ struct Override {
 #[derive (Debug, Clone)]
 enum Predicate {
     Name(String),
-    Nbt(String, String)
+    Nbt(String, String),
+    Enchantments(String)
 }
 
 fn main() {
@@ -81,7 +82,7 @@ fn main() {
         }
     }
 
-    println!("Original Models:\n{:#?}\n\n\n\nOverride Models:\n{:#?}", original_models, override_models);
+    // println!("Original Models:\n{:#?}\n\n\n\nOverride Models:\n{:#?}", original_models, override_models);
 
     fs::create_dir_all(format!("{}/assets/minecraft", &chime_pack_path)).expect("Error creating directory for Chime pack");
     fs::create_dir_all(format!("{}/assets/minecraft/models/item", &chime_pack_path)).expect("Error creating directory for models");
@@ -156,6 +157,9 @@ fn convert_optifine_model_to_item_struct(path: &String, items: &mut Vec<Item>) -
         if key.contains("nbt.display.Name")  { 
             predicate = Predicate::Name(val.to_string()); 
         } else 
+        if key.contains("enchantments") {
+            predicate = Predicate::Enchantments(val.to_string());
+        } else
         if key.contains("nbt") {
             predicate = Predicate::Nbt(key.to_string(), val.to_string());
         }
@@ -170,10 +174,9 @@ fn convert_optifine_model_to_item_struct(path: &String, items: &mut Vec<Item>) -
     let mut publish_new_item: bool = true;
     
     for item in &mut*items {
-        if item.texture == String::from(format!("minecraft:item/{}", properties.get("items").expect("Property could not be registered"))) {
+        if item.texture == String::from(format!("minecraft:item/{}", properties.get("items").expect("Property could not be registered").trim())) {
             item.overrides.push(override2.clone());
             publish_new_item = false;
-            break;
         }
     }
 
@@ -192,9 +195,11 @@ fn convert_optifine_model_to_item_struct(path: &String, items: &mut Vec<Item>) -
 fn serialize_item_struct_to_original_model(item: &Item) -> serde_json::Value {
     let mut overrides_vec: Vec<serde_json::Value> = Vec::new();
     for r#override in &item.overrides {
+        // println!("Item ID: {}", item.texture);
         let predicate = match &r#override.predicate {
             Predicate::Name(name) => json!({"name": name}),
-            Predicate::Nbt(key, val) => convert_nbt_string_to_value(key.to_string(), val.to_string())
+            Predicate::Nbt(key, val) => convert_nbt_string_to_value(key.to_string(), val.to_string()),
+            Predicate::Enchantments(list) => convert_enchantments_to_value(list.to_string(), item.texture.to_string())
         } ;
 
         overrides_vec.push(json!({"predicate": predicate, "model": r#override.model}));
@@ -244,4 +249,20 @@ fn convert_nbt_string_to_value (key: String, val: String) -> serde_json::Value {
     }
 
     final_nbt
+}
+
+fn convert_enchantments_to_value(list: String, id: String) -> serde_json::Value {
+    let enchants: Vec<&str> = list.split_whitespace().collect();
+    let mut enchants_value: Vec<serde_json::Value> = Vec::new();
+
+    for enchant in enchants {
+        enchants_value.push(json!({"id": format!("minecraft:{}", enchant)}));
+    }
+
+    if id == String::from("minecraft:item/enchanted_book") {
+        json!({"nbt":{"StoredEnchantments": enchants_value}})
+    } else {
+        json!({"nbt":{"Enchantments": enchants_value}})
+    }
+
 }
