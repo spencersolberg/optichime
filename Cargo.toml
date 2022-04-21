@@ -4,6 +4,12 @@ version = "0.1.0"
 authors = ["spencer"]
 edition = "2018"
 
+# Optimize for speed and binary size on release builds
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
